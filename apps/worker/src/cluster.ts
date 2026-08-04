@@ -221,9 +221,14 @@ export async function recalculateEvent(eventId: string): Promise<void> {
   }
 
   // 4. Severity
-  const trendBonus = trend === 'GROWING' ? 15 : trend === 'DECLINING' ? -10 : 0
-  const severity   = clamp(
-    Math.round(25 * Math.log10(Number(stats.total_frp) + 1) + 3 * recent + trendBonus),
+  // Formule: 20·log10(totalFrp+1) + 2·min(recent6h,8) + trendBonus
+  //   FRP-component loopt van 0 (0 MW) → 80 (10 GW); cap recent op 8 → max 16;
+  //   trendBonus max +15 → theoretisch plafond ~111, bereikbaar alleen bij
+  //   catastrofaal vuur. Geeft werkbare spreiding over het hele 0–100 bereik.
+  const trendBonus    = trend === 'GROWING' ? 15 : trend === 'DECLINING' ? -10 : 0
+  const recentCapped  = Math.min(recent, 8)
+  const severity      = clamp(
+    Math.round(20 * Math.log10(Number(stats.total_frp) + 1) + 2 * recentCapped + trendBonus),
     0, 100,
   )
 
@@ -314,6 +319,15 @@ export async function runStatusMachine(
   const coolingCutoff = new Date(now.getTime() - cfg.coolingH * 3_600_000)
   const closedCutoff  = new Date(now.getTime() - cfg.closedH  * 3_600_000)
 
+  // CANDIDATE → ACTIVE  (minPts bereikt) — eerst, zodat de cooling-check
+  // in dezelfde run ook nieuw-gepromoveerde events pakt
+  await prisma.$executeRaw`
+    UPDATE "FireEvent" fe
+    SET status = CAST('ACTIVE' AS "EventStatus"), "updatedAt" = NOW()
+    WHERE fe.status = CAST('CANDIDATE' AS "EventStatus")
+      AND (SELECT COUNT(*) FROM "Detection" WHERE "eventId" = fe.id) >= ${cfg.minPts}
+  `
+
   // ACTIVE → COOLING  (lang geen nieuwe detectie)
   await prisma.$executeRaw`
     UPDATE "FireEvent"
@@ -328,14 +342,6 @@ export async function runStatusMachine(
     SET status = CAST('CLOSED' AS "EventStatus"), "updatedAt" = NOW()
     WHERE status = CAST('COOLING' AS "EventStatus")
       AND "lastSeen" < ${closedCutoff}
-  `
-
-  // CANDIDATE → ACTIVE  (minPts bereikt)
-  await prisma.$executeRaw`
-    UPDATE "FireEvent" fe
-    SET status = CAST('ACTIVE' AS "EventStatus"), "updatedAt" = NOW()
-    WHERE fe.status = CAST('CANDIDATE' AS "EventStatus")
-      AND (SELECT COUNT(*) FROM "Detection" WHERE "eventId" = fe.id) >= ${cfg.minPts}
   `
 }
 

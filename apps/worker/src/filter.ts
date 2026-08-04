@@ -14,6 +14,7 @@ import { prisma } from '@wildfire/db'
 import { DEFAULT_CONFIG, type ClusterConfig } from './cluster.js'
 
 export interface FilterResult {
+  noNutsFiltered:     number
   staticHeatFiltered: number
   lowConfFiltered:    number
 }
@@ -21,6 +22,23 @@ export interface FilterResult {
 export async function filterNewDetections(
   cfg: ClusterConfig = DEFAULT_CONFIG,
 ): Promise<FilterResult> {
+  // ── 0. no_nuts_region-filter ─────────────────────────────────────────────
+  // Detecties buiten elke NUTS-regio (niveau 0 = landsgrenzen) worden verworpen.
+  // Vangt Noord-Afrikaanse en oceaan-pixels af die de bbox-rand raken.
+  const noNutsCount = await prisma.$executeRaw`
+    UPDATE "Detection" d
+    SET    filtered = true, "filterReason" = 'no_nuts_region'
+    WHERE  d.filtered  = false
+      AND  d."eventId" IS NULL
+      AND  d.geom      IS NOT NULL
+      AND  NOT EXISTS (
+             SELECT 1 FROM "Region" r
+             WHERE  r.level = 0
+               AND  r.geom  IS NOT NULL
+               AND  ST_Within(d.geom, r.geom)
+           )
+  `
+
   // ── 1. StaticHeatSource-filter ───────────────────────────────────────────
   // Raakt alleen unfiltered + unattached detecties met een bekende geom.
   const staticCount = await prisma.$executeRaw`
@@ -62,6 +80,7 @@ export async function filterNewDetections(
   `
 
   return {
+    noNutsFiltered:     Number(noNutsCount),
     staticHeatFiltered: Number(staticCount),
     lowConfFiltered:    Number(lowCount),
   }

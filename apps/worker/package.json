@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "DOTENV_CONFIG_PATH=../../.env tsx watch src/ingest.ts",
     "start": "DOTENV_CONFIG_PATH=../../.env tsx src/ingest.ts",
-    "replay": "DOTENV_CONFIG_PATH=../../.env tsx src/replay.ts"
+    "replay":   "DOTENV_CONFIG_PATH=../../.env tsx src/replay.ts",
+    "suspects": "DOTENV_CONFIG_PATH=../../.env tsx src/suspects.ts"
   },
   "dependencies": {
     "@wildfire/db": "workspace:*"

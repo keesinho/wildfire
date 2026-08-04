@@ -17,6 +17,7 @@ import {
   DEFAULT_CONFIG,
   type ClusterConfig,
 } from './cluster.js'
+import { filterNewDetections } from './filter.js'
 
 // ── Arg-parsing ──────────────────────────────────────────────────────────────
 
@@ -60,10 +61,18 @@ async function main() {
   console.log('═'.repeat(60))
 
   // ── 1. Reset ──────────────────────────────────────────────────────────────
-  console.log('[replay] FireEvent-tabel leegmaken + eventId resetten…')
-  await prisma.$executeRaw`UPDATE "Detection" SET "eventId" = NULL`
+  console.log('[replay] FireEvent-tabel leegmaken + detecties volledig resetten…')
+  await prisma.$executeRaw`
+    UPDATE "Detection"
+    SET "eventId" = NULL, filtered = false, "filterReason" = NULL
+  `
   await prisma.fireEvent.deleteMany()
   console.log('[replay] reset klaar')
+
+  // ── 1b. Filter opnieuw toepassen ──────────────────────────────────────────
+  console.log('[replay] filters toepassen…')
+  const { noNutsFiltered, staticHeatFiltered, lowConfFiltered } = await filterNewDetections(cfg)
+  console.log(`[replay] no_nuts_region: ${noNutsFiltered}  static_heat_source: ${staticHeatFiltered}  low_conf_isolated: ${lowConfFiltered}`)
 
   // ── 2. Detecties ophalen ──────────────────────────────────────────────────
   const detections = await prisma.detection.findMany({

@@ -72,8 +72,8 @@ async function main() {
   const unfiltered = await unfilterLowConfWithNeighbors()
   console.log(`[filter] low_conf_isolated ongedaan gemaakt: ${unfiltered}`)
 
-  const { staticHeatFiltered, lowConfFiltered } = await filterNewDetections()
-  console.log(`[filter] static_heat_source: ${staticHeatFiltered}  low_conf_isolated: ${lowConfFiltered}`)
+  const { noNutsFiltered, staticHeatFiltered, lowConfFiltered } = await filterNewDetections()
+  console.log(`[filter] no_nuts_region: ${noNutsFiltered}  static_heat_source: ${staticHeatFiltered}  low_conf_isolated: ${lowConfFiltered}`)
 
   // ── Cluster ──────────────────────────────────────────────────────────────
   const eventCount = await clusterAndRecalculate()

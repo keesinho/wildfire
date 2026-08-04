@@ -8,7 +8,9 @@
     "db:migrate:dev": "pnpm --filter @wildfire/db migrate:dev",
     "seed:nuts": "tsx scripts/seed-nuts.ts",
     "seed:geonames": "tsx scripts/seed-geonames.ts",
-    "replay": "pnpm --filter worker replay"
+    "seed:heat-sources": "DOTENV_CONFIG_PATH=.env tsx scripts/seed-heat-sources.ts",
+    "replay":   "pnpm --filter worker replay",
+    "suspects": "pnpm --filter worker suspects"
   },
   "dependencies": {
     "@wildfire/db": "workspace:*"
