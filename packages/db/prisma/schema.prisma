@@ -189,8 +189,11 @@ model ApiKey {
   keyHash   String     @unique
   ownerMail String
   plan      String     @default("free")
+  signupIp  String?
   createdAt DateTime   @default(now())
   usage     ApiUsage[]
+
+  @@index([signupIp, createdAt])
 }
 
 model ApiUsage {
