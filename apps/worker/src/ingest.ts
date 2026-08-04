@@ -1,6 +1,8 @@
 import 'dotenv/config'
 import { prisma } from '@wildfire/db'
 import { fetchFirms, SOURCES } from './firms.js'
+import { filterNewDetections, unfilterLowConfWithNeighbors } from './filter.js'
+import { clusterAndRecalculate } from './cluster.js'
 
 // ------------------------------------------------------------------ config
 
@@ -60,6 +62,22 @@ async function main() {
 
   const dbTotal = await prisma.detection.count()
   console.log(`[ingest] klaar — nieuw: ${totalNew}  dupes overgeslagen: ${totalSkipped}  totaal in db: ${dbTotal}`)
+
+  if (totalNew === 0) {
+    console.log('[ingest] geen nieuwe detecties — filter/cluster overgeslagen')
+    return
+  }
+
+  // ── Filter ───────────────────────────────────────────────────────────────
+  const unfiltered = await unfilterLowConfWithNeighbors()
+  console.log(`[filter] low_conf_isolated ongedaan gemaakt: ${unfiltered}`)
+
+  const { staticHeatFiltered, lowConfFiltered } = await filterNewDetections()
+  console.log(`[filter] static_heat_source: ${staticHeatFiltered}  low_conf_isolated: ${lowConfFiltered}`)
+
+  // ── Cluster ──────────────────────────────────────────────────────────────
+  const eventCount = await clusterAndRecalculate()
+  console.log(`[cluster] gerakte events herberekend: ${eventCount}`)
 }
 
 main()

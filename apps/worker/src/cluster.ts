@@ -339,6 +339,48 @@ export async function runStatusMachine(
   `
 }
 
+// ── Batch cluster + herbereken ────────────────────────────────────────────────
+
+/**
+ * Verwerkt alle ongehechte, ongefilterde detecties:
+ *  1. Loop processDetection op volgorde van acquiredAt
+ *  2. Herbereken alle gerakte events
+ *  3. Draai de statusmachine
+ * @returns aantal nieuwe events dat aangemaakt is
+ */
+export async function clusterAndRecalculate(
+  cfg: ClusterConfig = DEFAULT_CONFIG,
+): Promise<number> {
+  // Haal alle unattached + unfiltered detecties op, gesorteerd op tijd
+  const detections = await prisma.$queryRaw<DetectionLike[]>`
+    SELECT id, lat, lon, frp, confidence, "acquiredAt"
+    FROM   "Detection"
+    WHERE  "eventId"  IS NULL
+      AND  filtered   = false
+      AND  geom       IS NOT NULL
+    ORDER BY "acquiredAt" ASC
+  `
+
+  if (detections.length === 0) return 0
+
+  // Verwerk detectie voor detectie
+  const touchedEvents = new Set<string>()
+  for (const d of detections) {
+    const eventId = await processDetection(d, cfg)
+    if (eventId) touchedEvents.add(eventId)
+  }
+
+  // Herbereken alle gerakte events
+  for (const eventId of touchedEvents) {
+    await recalculateEvent(eventId)
+  }
+
+  // Statusmachine met huidige tijd
+  await runStatusMachine(new Date(), cfg)
+
+  return touchedEvents.size
+}
+
 // ── Hoofd-clusterstap (één detectie) ────────────────────────────────────────
 
 /**
