@@ -2,6 +2,9 @@
   "name": "wildfire",
   "private": true,
   "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24.14.0"
+  },
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "db:generate": "pnpm --filter @wildfire/db generate",
