@@ -391,3 +391,16 @@ Dit lever je meteen demomateriaal op ("zo zag onze reconstructie van de Gironde-
 2. **Regiocodes**: NUTS als ruggengraat; MeteoAlarm-gebiedscodes daarop mappen (eenmalige mapping-tabel, deels handwerk).
 3. **WhatsApp-alerts**: bewust uitgesteld — Business-API-setup en templategoedkeuring zijn gedoe; e-mail + webhook eerst, WhatsApp als betaalde upgrade later.
 4. **Naam/domein**: één merk voor site + API scheelt SEO-werk; API kan op `api.` subdomein.
+
+## 11. Bekende beperkingen
+
+- **Land-brede warning-fallback is te grof (fase 3).** `/api/risk` valt terug op
+  alle warnings van het land wanneer een MeteoAlarm-`EMMA_ID` niet op onze
+  `Region.code` matcht (bevestigd: Spanje/Portugal/Polen/Duitsland/Servië
+  gebruiken `EMMA_ID` i.p.v. NUTS3 — zie `apps/worker/src/warnings.ts`).
+  Gevolg: een Algarve-locatie krijgt ook Madeira-waarschuwingen te zien,
+  simpelweg omdat beide `PT` zijn. De ruwe geocode staat al in
+  `Warning.raw` zodat dit zonder herfetch te repareren is. **Fix in fase 4**:
+  een eenmalige EMMA→NUTS-crosswalktabel bouwen (grotendeels handwerk, zie
+  beslissing #2 hierboven) zodat de fallback overbodig wordt voor de landen
+  waar hij nu nodig is.

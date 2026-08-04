@@ -76,6 +76,10 @@ export async function GET() {
 
   return NextResponse.json(
     { type: 'FeatureCollection', features },
-    { headers: { 'Cache-Control': 'no-store' } },
+    {
+      // Zonder expliciete charset defaulten sommige HTTP-clients op Latin-1,
+      // wat event-namen met accenten corrumpeert terwijl de bytes UTF-8 zijn.
+      headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' },
+    },
   )
 }

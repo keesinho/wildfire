@@ -6,13 +6,18 @@
     "dev": "DOTENV_CONFIG_PATH=../../.env tsx watch src/ingest.ts",
     "start": "DOTENV_CONFIG_PATH=../../.env tsx src/ingest.ts",
     "replay":   "DOTENV_CONFIG_PATH=../../.env tsx src/replay.ts",
-    "suspects": "DOTENV_CONFIG_PATH=../../.env tsx src/suspects.ts"
+    "suspects": "DOTENV_CONFIG_PATH=../../.env tsx src/suspects.ts",
+    "warnings": "DOTENV_CONFIG_PATH=../../.env tsx src/warnings.ts",
+    "danger":   "DOTENV_CONFIG_PATH=../../.env tsx src/danger.ts"
   },
   "dependencies": {
-    "@wildfire/db": "workspace:*"
+    "@wildfire/db": "workspace:*",
+    "fast-xml-parser": "^4.5.0",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pngjs": "^6.0.5",
     "dotenv": "^16.4.5",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"

@@ -46,6 +46,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(geojson, {
-    headers: { 'Cache-Control': 'no-store' },
+    headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' },
   })
 }
