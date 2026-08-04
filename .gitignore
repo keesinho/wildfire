@@ -1,0 +1,8 @@
+.env
+.env.local
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+pnpm-lock.yaml
+packages/db/src/generated/

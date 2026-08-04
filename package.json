@@ -1,0 +1,22 @@
+{
+  "name": "wildfire",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "db:generate": "pnpm --filter @wildfire/db generate",
+    "db:migrate": "pnpm --filter @wildfire/db migrate",
+    "db:migrate:dev": "pnpm --filter @wildfire/db migrate:dev",
+    "seed:nuts": "tsx scripts/seed-nuts.ts",
+    "seed:geonames": "tsx scripts/seed-geonames.ts"
+  },
+  "dependencies": {
+    "@wildfire/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/unzipper": "^0.10.10",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "unzipper": "^0.12.3"
+  }
+}

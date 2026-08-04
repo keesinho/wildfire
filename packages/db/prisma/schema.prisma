@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum HotspotSource {
+  VIIRS_SNPP
+  VIIRS_NOAA20
+  VIIRS_NOAA21
+  MODIS
+}
+
+enum Confidence {
+  LOW
+  NOMINAL
+  HIGH
+}
+
+enum EventStatus {
+  CANDIDATE
+  ACTIVE
+  COOLING
+  CLOSED
+}
+
+enum Trend {
+  GROWING
+  STABLE
+  DECLINING
+  UNKNOWN
+}
+
+enum WarnLevel {
+  YELLOW
+  ORANGE
+  RED
+}
+
+enum SubChannel {
+  EMAIL
+  WEBHOOK
+}
+
+model Detection {
+  id           String        @id @default(cuid())
+  source       HotspotSource
+  lat          Float
+  lon          Float
+  geom         Unsupported("geometry(Point,4326)")?
+  acquiredAt   DateTime
+  confidence   Confidence
+  frp          Float?
+  brightness   Float?
+  daynight     String?
+  filtered     Boolean       @default(false)
+  filterReason String?
+  eventId      String?
+  event        FireEvent?    @relation(fields: [eventId], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@unique([source, acquiredAt, lat, lon])
+  @@index([acquiredAt])
+  @@index([eventId])
+}
+
+model FireEvent {
+  id             String      @id @default(cuid())
+  slug           String      @unique
+  name           String?
+  centroidLat    Float
+  centroidLon    Float
+  geomCentroid   Unsupported("geometry(Point,4326)")?
+  geomHull       Unsupported("geometry(Polygon,4326)")?
+  firstSeen      DateTime
+  lastSeen       DateTime
+  detectionCount Int         @default(0)
+  totalFrp       Float       @default(0)
+  maxFrp         Float       @default(0)
+  estAreaHa      Float?
+  trend          Trend       @default(UNKNOWN)
+  status         EventStatus @default(CANDIDATE)
+  severity       Int         @default(0)
+  countryCode    String?
+  regionId       String?
+  region         Region?     @relation(fields: [regionId], references: [id])
+  detections     Detection[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([status, lastSeen])
+  @@index([countryCode])
+}
+
+model Region {
+  id          String      @id @default(cuid())
+  code        String      @unique
+  name        String
+  countryCode String
+  level       Int
+  geom        Unsupported("geometry(MultiPolygon,4326)")?
+  events      FireEvent[]
+  warnings    Warning[]
+}
+
+model Warning {
+  id            String    @id @default(cuid())
+  externalId    String    @unique
+  countryCode   String
+  awarenessType String
+  level         WarnLevel
+  onset         DateTime
+  expires       DateTime
+  headline      String?
+  regionId      String?
+  region        Region?   @relation(fields: [regionId], references: [id])
+  raw           Json
+  fetchedAt     DateTime  @default(now())
+
+  @@index([countryCode, expires])
+  @@index([awarenessType, level])
+}
+
+model DangerReading {
+  id        String   @id @default(cuid())
+  cellLat   Float
+  cellLon   Float
+  date      DateTime @db.Date
+  fwiClass  String
+  fwiValue  Float?
+  fetchedAt DateTime @default(now())
+
+  @@unique([cellLat, cellLon, date])
+}
+
+model StaticHeatSource {
+  id      String  @id @default(cuid())
+  lat     Float
+  lon     Float
+  radiusM Int     @default(750)
+  type    String
+  note    String?
+}
+
+model Place {
+  id          String  @id
+  name        String
+  lat         Float
+  lon         Float
+  population  Int
+  countryCode String
+  admin1      String?
+
+  @@index([countryCode])
+}
+
+model Subscription {
+  id            String          @id @default(cuid())
+  channel       SubChannel
+  target        String
+  label         String?
+  lat           Float
+  lon           Float
+  radiusKm      Int             @default(30)
+  minSeverity   Int             @default(20)
+  active        Boolean         @default(true)
+  apiKeyId      String?
+  createdAt     DateTime        @default(now())
+  notifications NotificationLog[]
+}
+
+model NotificationLog {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  eventId        String
+  kind           String
+  sentAt         DateTime     @default(now())
+
+  @@index([subscriptionId, eventId])
+}
+
+model ApiKey {
+  id        String     @id @default(cuid())
+  keyHash   String     @unique
+  ownerMail String
+  plan      String     @default("free")
+  createdAt DateTime   @default(now())
+  usage     ApiUsage[]
+}
+
+model ApiUsage {
+  id       String   @id @default(cuid())
+  apiKeyId String
+  apiKey   ApiKey   @relation(fields: [apiKeyId], references: [id])
+  date     DateTime @db.Date
+  count    Int      @default(0)
+
+  @@unique([apiKeyId, date])
+}
