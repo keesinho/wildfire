@@ -6,3 +6,4 @@ dist/
 *.tsbuildinfo
 pnpm-lock.yaml
 packages/db/src/generated/
+apps/**/.env*

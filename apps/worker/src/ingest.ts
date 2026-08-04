@@ -1,21 +1,65 @@
 import 'dotenv/config'
 import { prisma } from '@wildfire/db'
+import { fetchFirms, SOURCES } from './firms.js'
+
+// ------------------------------------------------------------------ config
+
+/**
+ * Leest een parameter in volgorde van prioriteit:
+ *   1. CLI-argument  --<flag> <value>
+ *   2. Omgevingsvariabele  <envKey>
+ *   3. Ingebouwde standaardwaarde  <fallback>
+ */
+function getParam(envKey: string, cliFlag: string, fallback: string): string {
+  const idx = process.argv.indexOf(`--${cliFlag}`)
+  if (idx !== -1 && process.argv[idx + 1]) return process.argv[idx + 1]
+  return process.env[envKey] ?? fallback
+}
+
+// ------------------------------------------------------------------ main
 
 async function main() {
-  console.log('[ingest] connecting to database…')
+  const mapKey = process.env.FIRMS_MAP_KEY
+  if (!mapKey) throw new Error('FIRMS_MAP_KEY is niet ingesteld')
 
-  const result = await prisma.$queryRaw<[{ postgis_version: string }]>`
-    SELECT PostGIS_Version() AS postgis_version
-  `
-  console.log('[ingest] PostGIS version:', result[0].postgis_version)
+  // Standaard: Zuidwest-Europa; backfill via --bbox en --days of env vars
+  // Voorbeelden:
+  //   pnpm --filter worker start -- --bbox "-25,34,45,72" --days 5
+  //   FIRMS_BBOX="-25,34,45,72" FIRMS_DAYS=5 pnpm --filter worker start
+  const bbox = getParam('FIRMS_BBOX', 'bbox', '-10,36,10,48')
+  const days = Math.min(10, Math.max(1, parseInt(getParam('FIRMS_DAYS', 'days', '1'), 10)))
 
-  const regionCount = await prisma.region.count()
-  const placeCount  = await prisma.place.count()
-  console.log(`[ingest] regions: ${regionCount}, places: ${placeCount}`)
+  console.log(`[ingest] start  bbox=${bbox}  days=${days}`)
+  console.log(`[ingest] PostGIS: ${(await prisma.$queryRaw<[{v:string}]>`SELECT PostGIS_Version() v`)[0].v}`)
 
-  // TODO fase 1: fetchFirms()    — NASA FIRMS VIIRS/MODIS hotspots
-  // TODO fase 3: fetchWarnings() — MeteoAlarm CAP-feeds
-  // TODO fase 3: fetchDanger()   — EFFIS Fire Weather Index
+  let totalNew      = 0
+  let totalSkipped  = 0
+
+  for (const source of SOURCES) {
+    console.log(`[ingest] → ${source.apiName}…`)
+
+    let detections
+    try {
+      detections = await fetchFirms(mapKey, source, bbox, days)
+    } catch (err) {
+      console.error(`[ingest]   ${source.apiName} mislukt:`, err)
+      continue
+    }
+
+    console.log(`[ingest]   ${detections.length} records geparseerd`)
+    if (detections.length === 0) continue
+
+    // Batch-upsert in blokken van 500; skipDuplicates zorgt voor idempotentie
+    for (let i = 0; i < detections.length; i += 500) {
+      const chunk  = detections.slice(i, i + 500)
+      const result = await prisma.detection.createMany({ data: chunk, skipDuplicates: true })
+      totalNew     += result.count
+      totalSkipped += chunk.length - result.count
+    }
+  }
+
+  const dbTotal = await prisma.detection.count()
+  console.log(`[ingest] klaar — nieuw: ${totalNew}  dupes overgeslagen: ${totalSkipped}  totaal in db: ${dbTotal}`)
 }
 
 main()
