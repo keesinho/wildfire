@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "DOTENV_CONFIG_PATH=../../.env tsx watch src/ingest.ts",
-    "start": "DOTENV_CONFIG_PATH=../../.env tsx src/ingest.ts"
+    "start": "DOTENV_CONFIG_PATH=../../.env tsx src/ingest.ts",
+    "replay": "DOTENV_CONFIG_PATH=../../.env tsx src/replay.ts"
   },
   "dependencies": {
     "@wildfire/db": "workspace:*"

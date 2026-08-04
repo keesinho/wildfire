@@ -7,7 +7,8 @@
     "db:migrate": "pnpm --filter @wildfire/db migrate",
     "db:migrate:dev": "pnpm --filter @wildfire/db migrate:dev",
     "seed:nuts": "tsx scripts/seed-nuts.ts",
-    "seed:geonames": "tsx scripts/seed-geonames.ts"
+    "seed:geonames": "tsx scripts/seed-geonames.ts",
+    "replay": "pnpm --filter worker replay"
   },
   "dependencies": {
     "@wildfire/db": "workspace:*"
