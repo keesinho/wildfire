@@ -8,7 +8,8 @@
     "replay":   "DOTENV_CONFIG_PATH=../../.env tsx src/replay.ts",
     "suspects": "DOTENV_CONFIG_PATH=../../.env tsx src/suspects.ts",
     "warnings": "DOTENV_CONFIG_PATH=../../.env tsx src/warnings.ts",
-    "danger":   "DOTENV_CONFIG_PATH=../../.env tsx src/danger.ts"
+    "danger":   "DOTENV_CONFIG_PATH=../../.env tsx src/danger.ts",
+    "alerts":   "DOTENV_CONFIG_PATH=../../.env tsx src/alerts.ts"
   },
   "dependencies": {
     "@wildfire/db": "workspace:*",

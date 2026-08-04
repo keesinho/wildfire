@@ -1,0 +1,43 @@
+name: Alerts Cron
+
+on:
+  schedule:
+    # Elke 15 minuten, gelijk aan de ingest-cadans (dan veranderen events pas echt)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # handmatig triggeren via GitHub UI
+
+jobs:
+  alerts:
+    name: Run alert worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Run alerts
+        run: pnpm --filter worker alerts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          APP_BASE_URL: ${{ vars.APP_BASE_URL }}

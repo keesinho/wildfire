@@ -1,17 +1,11 @@
 import { prisma } from '@wildfire/db'
 import { generateApiKey, hashKey, jsonOk, jsonError } from '@/lib/apiAuth'
 import { limitForPlan } from '@/lib/plans'
+import { EMAIL_RE, clientIp } from '@/lib/requestUtils'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_SIGNUPS_PER_IP_PER_DAY = 3
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function clientIp(request: Request): string {
-  const fwd = request.headers.get('x-forwarded-for')
-  if (fwd) return fwd.split(',')[0].trim()
-  return request.headers.get('x-real-ip') ?? 'unknown'
-}
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)

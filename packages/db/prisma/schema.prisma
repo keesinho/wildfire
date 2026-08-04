@@ -159,18 +159,23 @@ model Place {
 }
 
 model Subscription {
-  id            String          @id @default(cuid())
-  channel       SubChannel
-  target        String
-  label         String?
-  lat           Float
-  lon           Float
-  radiusKm      Int             @default(30)
-  minSeverity   Int             @default(20)
-  active        Boolean         @default(true)
-  apiKeyId      String?
-  createdAt     DateTime        @default(now())
-  notifications NotificationLog[]
+  id                String          @id @default(cuid())
+  channel           SubChannel
+  target            String
+  label             String?
+  lat               Float
+  lon               Float
+  radiusKm          Int             @default(30)
+  minSeverity       Int             @default(20)
+  active            Boolean         @default(true)
+  apiKeyId          String?
+  signupIp          String?
+  unsubscribeToken  String          @unique @default(cuid())
+  confirmToken      String?         @unique
+  createdAt         DateTime        @default(now())
+  notifications     NotificationLog[]
+
+  @@index([signupIp, createdAt])
 }
 
 model NotificationLog {
@@ -179,6 +184,8 @@ model NotificationLog {
   subscription   Subscription @relation(fields: [subscriptionId], references: [id])
   eventId        String
   kind           String
+  severity       Int?
+  distanceKm     Float?
   sentAt         DateTime     @default(now())
 
   @@index([subscriptionId, eventId])
