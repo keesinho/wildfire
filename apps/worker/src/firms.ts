@@ -1,6 +1,7 @@
 import type { Confidence, HotspotSource } from '@wildfire/db'
 
-const FIRMS_BASE = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv'
+const FIRMS_BASE    = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv'
+const NRT_MAX_DAYS  = 5   // NRT-feeds ondersteunen max. 5 dagen per call
 
 export const SOURCES = [
   { apiName: 'VIIRS_SNPP_NRT',   enumVal: 'VIIRS_SNPP'   as HotspotSource },
@@ -55,20 +56,25 @@ function parseAcquiredAt(date: string, time: string): Date {
 // ------------------------------------------------------------------ fetch
 
 /**
- * Fetch een enkele FIRMS-bron en retourneer geparseerde detecties.
+ * Fetch één FIRMS-bron voor één tijdvenster (max. NRT_MAX_DAYS).
  *
  * @param mapKey   NASA FIRMS MAP_KEY
  * @param source   één van SOURCES
  * @param bbox     "W,S,E,N"  bijv. "-10,36,10,48"
- * @param days     1–10 (FIRMS-maximum)
+ * @param days     1–NRT_MAX_DAYS
+ * @param endDate  optioneel einddatum "YYYY-MM-DD"; standaard = vandaag
  */
-export async function fetchFirms(
+async function fetchFirmsWindow(
   mapKey: string,
   source: FirmsSource,
   bbox: string,
   days: number,
+  endDate?: string,
 ): Promise<DetectionInput[]> {
-  const url = `${FIRMS_BASE}/${mapKey}/${source.apiName}/${bbox}/${days}`
+  const clampedDays = Math.min(days, NRT_MAX_DAYS)
+  const url = endDate
+    ? `${FIRMS_BASE}/${mapKey}/${source.apiName}/${bbox}/${clampedDays}/${endDate}`
+    : `${FIRMS_BASE}/${mapKey}/${source.apiName}/${bbox}/${clampedDays}`
   const res = await fetch(url)
 
   if (!res.ok) {
@@ -131,4 +137,48 @@ export async function fetchFirms(
   }
 
   return detections
+}
+
+/**
+ * Publieke wrapper: fetch alle data voor `days` dagen terug.
+ * Chunkt automatisch in vensters van NRT_MAX_DAYS bij days > 5.
+ * Dupes (door overlappende daggrenzen) worden door de DB-upsert afgevangen.
+ *
+ * @param mapKey  NASA FIRMS MAP_KEY
+ * @param source  één van SOURCES
+ * @param bbox    "W,S,E,N"
+ * @param days    1 – any (wordt intern gesplitst in blokken van max. 5)
+ */
+export async function fetchFirms(
+  mapKey: string,
+  source: FirmsSource,
+  bbox:   string,
+  days:   number,
+): Promise<DetectionInput[]> {
+  if (days <= NRT_MAX_DAYS) {
+    return fetchFirmsWindow(mapKey, source, bbox, days)
+  }
+
+  // Splits in vensters van NRT_MAX_DAYS, elk met een expliciete einddatum
+  const all: DetectionInput[] = []
+  let remaining = days
+
+  while (remaining > 0) {
+    const windowDays = Math.min(remaining, NRT_MAX_DAYS)
+    const offsetDays = days - remaining           // hoeveel al verwerkt
+    const endDate    = isoDateOffset(-offsetDays) // einddatum van dit venster
+
+    const chunk = await fetchFirmsWindow(mapKey, source, bbox, windowDays, endDate)
+    all.push(...chunk)
+    remaining -= windowDays
+  }
+
+  return all
+}
+
+/** Geeft ISO-datum (YYYY-MM-DD) voor vandaag + offsetDays (negatief = terug). */
+function isoDateOffset(offsetDays: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + offsetDays)
+  return d.toISOString().slice(0, 10)
 }

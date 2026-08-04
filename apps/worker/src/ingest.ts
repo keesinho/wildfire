@@ -27,7 +27,7 @@ async function main() {
   //   pnpm --filter worker start -- --bbox "-25,34,45,72" --days 5
   //   FIRMS_BBOX="-25,34,45,72" FIRMS_DAYS=5 pnpm --filter worker start
   const bbox = getParam('FIRMS_BBOX', 'bbox', '-10,36,10,48')
-  const days = Math.min(10, Math.max(1, parseInt(getParam('FIRMS_DAYS', 'days', '1'), 10)))
+  const days = Math.max(1, parseInt(getParam('FIRMS_DAYS', 'days', '1'), 10))
 
   console.log(`[ingest] start  bbox=${bbox}  days=${days}`)
   console.log(`[ingest] PostGIS: ${(await prisma.$queryRaw<[{v:string}]>`SELECT PostGIS_Version() v`)[0].v}`)
