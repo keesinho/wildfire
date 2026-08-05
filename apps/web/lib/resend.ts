@@ -2,7 +2,7 @@
  * Plain fetch naar de Resend REST-API — geen SDK, zelfde stijl als alle
  * andere externe calls in dit project (FIRMS, MeteoAlarm, EFFIS, Open-Meteo).
  */
-const RESEND_FROM = 'Wildfire Alerts <alerts@wildfire.dev>'
+const RESEND_FROM = 'Wildfire Alerts <alerts@vuuralert.nl>'
 
 export async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
