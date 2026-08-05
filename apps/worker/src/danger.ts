@@ -27,6 +27,9 @@
  * Gebruik:
  *   pnpm --filter worker danger
  *   pnpm --filter worker danger -- --bbox "-10,36,10,48" --days 4
+ *
+ * Standaard-bbox is heel Europa; kleinere regio's kunnen via --bbox of
+ * EFFIS_BBOX worden opgegeven.
  */
 import 'dotenv/config'
 import { randomUUID } from 'node:crypto'
@@ -173,7 +176,7 @@ async function upsertReadings(readings: CellReading[], date: string): Promise<vo
 // ------------------------------------------------------------------ main
 
 async function main() {
-  const bboxStr = getParam('EFFIS_BBOX', 'bbox', '-10,36,10,48')
+  const bboxStr = getParam('EFFIS_BBOX', 'bbox', '-25,34,45,72')
   const days    = Math.max(1, parseInt(getParam('EFFIS_DAYS', 'days', '4'), 10))
   const bbox    = bboxStr.split(',').map(Number) as [number, number, number, number]
 

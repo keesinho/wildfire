@@ -24,11 +24,12 @@ async function main() {
   const mapKey = process.env.FIRMS_MAP_KEY
   if (!mapKey) throw new Error('FIRMS_MAP_KEY is niet ingesteld')
 
-  // Standaard: Zuidwest-Europa; backfill via --bbox en --days of env vars
-  // Voorbeelden:
-  //   pnpm --filter worker start -- --bbox "-25,34,45,72" --days 5
-  //   FIRMS_BBOX="-25,34,45,72" FIRMS_DAYS=5 pnpm --filter worker start
-  const bbox = getParam('FIRMS_BBOX', 'bbox', '-10,36,10,48')
+  // Standaard: heel Europa; de no_nuts_region-filter (zie filter.ts) vangt
+  // Noord-Afrikaanse en oceaan-pixels af die de bbox-rand raken.
+  // Backfill via --bbox en --days of env vars, bv.:
+  //   pnpm --filter worker start -- --bbox "-10,36,10,48" --days 5
+  //   FIRMS_BBOX="-10,36,10,48" FIRMS_DAYS=5 pnpm --filter worker start
+  const bbox = getParam('FIRMS_BBOX', 'bbox', '-25,34,45,72')
   const days = Math.max(1, parseInt(getParam('FIRMS_DAYS', 'days', '1'), 10))
 
   console.log(`[ingest] start  bbox=${bbox}  days=${days}`)
