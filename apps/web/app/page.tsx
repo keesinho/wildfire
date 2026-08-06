@@ -4,7 +4,7 @@ export default function Home() {
       <h1>Wildfire</h1>
       <p>Real-time wildfire monitoring API for Europe.</p>
       <p>
-        <a href="/docs">Docs</a> · <a href="/dashboard">Get an API key</a> · <a href="/demo">Live demo</a>
+        <a href="/docs">Docs</a> · <a href="/dashboard">Get an API key</a> · <a href="/demo">Live demo</a> · <a href="/alerts">E-mailwaarschuwingen</a>
       </p>
     </main>
   )
