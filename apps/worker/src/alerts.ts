@@ -15,8 +15,8 @@ import { prisma } from '@wildfire/db'
 import { buildContext, buildMessage, type EventLike, type SubscriptionLike, type AlertKind } from './alertContext.js'
 import { sendEmail, sendWebhook } from './notify.js'
 
-const RADIUS_DEFAULT_KM = 300 // veiligheidsmarge boven de max subscription.radiusKm uit de DB-check zelf
-const THROTTLE_H        = 6
+const CANDIDATE_MARGIN_KM = 50 // marge boven sub.radiusKm in de SQL-prefilter: hull kan dichterbij liggen dan de centroid
+const THROTTLE_H          = 6
 const CLOSED_LOOKBACK_H = 24 * 14 // hoe ver terug we CLOSED-events nog voor all-clear controleren
 
 // ── Severity-banden — exact de breekpunten uit cluster.ts ───────────────────
@@ -57,6 +57,8 @@ async function getActiveSubscriptions(): Promise<SubRow[]> {
 }
 
 async function getCandidateEvents(sub: SubRow): Promise<EventRow[]> {
+  // SQL-prefilter op centroid-afstand, met marge: de echte grens (sub.radiusKm,
+  // op hull-afstand) wordt hierna in decide() gecontroleerd.
   const nearby = await prisma.$queryRaw<EventRow[]>`
     SELECT id, name, slug, status, severity, trend,
            "centroidLat" AS "centroidLat", "centroidLon" AS "centroidLon"
@@ -66,7 +68,7 @@ async function getCandidateEvents(sub: SubRow): Promise<EventRow[]> {
       AND  ST_DWithin(
              "geomCentroid"::geography,
              ST_SetSRID(ST_MakePoint(${sub.lon}, ${sub.lat}), 4326)::geography,
-             ${Math.max(sub.radiusKm, RADIUS_DEFAULT_KM) * 1000}
+             ${(sub.radiusKm + CANDIDATE_MARGIN_KM) * 1000}
            )
   `
 
@@ -126,14 +128,18 @@ async function decide(sub: SubRow, event: EventRow): Promise<Decision | null> {
     return { kind: 'all_clear', distanceKm } // bypasst de 6u-throttle — eenmalig bericht
   }
 
+  // Echte straal-check op hull-afstand — de SQL-prefilter hierboven is bewust
+  // ruimer (marge + op centroid) en filtert dit niet af.
+  const distanceKm = await getHullDistanceKm(sub.lat, sub.lon, event.id)
+  if (distanceKm > sub.radiusKm) return null
+
   let kind: AlertKind | null = null
 
   if (!lastNewOrUpdate) {
     if (event.status === 'ACTIVE' && event.severity >= sub.minSeverity) kind = 'new'
   } else {
-    const distanceKm = await getHullDistanceKm(sub.lat, sub.lon, event.id)
-    const bandJump   = severityBand(event.severity) > severityBand(lastNewOrUpdate.severity ?? 0)
-    const shrunk     = lastNewOrUpdate.distanceKm != null && distanceKm <= lastNewOrUpdate.distanceKm * 0.8
+    const bandJump = severityBand(event.severity) > severityBand(lastNewOrUpdate.severity ?? 0)
+    const shrunk   = lastNewOrUpdate.distanceKm != null && distanceKm <= lastNewOrUpdate.distanceKm * 0.8
     if (bandJump || shrunk) kind = 'update'
   }
 
@@ -141,7 +147,6 @@ async function decide(sub: SubRow, event: EventRow): Promise<Decision | null> {
 
   if (last && Date.now() - last.sentAt.getTime() < THROTTLE_H * 3_600_000) return null // rule 3
 
-  const distanceKm = await getHullDistanceKm(sub.lat, sub.lon, event.id)
   return { kind, distanceKm }
 }
 
@@ -150,6 +155,11 @@ async function decide(sub: SubRow, event: EventRow): Promise<Decision | null> {
 async function main() {
   const dryRun = process.argv.includes('--dry-run')
   console.log(`[alerts] start${dryRun ? ' (DRY RUN — geen sends, geen DB-writes)' : ''}`)
+
+  const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:3000'
+  if (!process.env.APP_BASE_URL && !dryRun) {
+    console.warn('[alerts] APP_BASE_URL niet gezet — uitschrijflinks wijzen naar http://localhost:3000. In productie hoort dit https://www.vuuralert.nl te zijn (zie cron-alerts.yml → vars.APP_BASE_URL).')
+  }
 
   const subs = await getActiveSubscriptions()
   console.log(`[alerts] ${subs.length} actieve subscriptions`)
@@ -169,7 +179,7 @@ async function main() {
       const ctx = await buildContext(subLike, event)
       ctx.distanceKm = Math.round(decision.distanceKm * 10) / 10 // hull-afstand i.p.v. centroid-afstand
 
-      const unsubscribeUrl = `${process.env.APP_BASE_URL ?? 'http://localhost:3000'}/unsubscribe?token=${sub.unsubscribeToken}`
+      const unsubscribeUrl = `${appBaseUrl}/unsubscribe?token=${sub.unsubscribeToken}`
       const message = await buildMessage(subLike, event, decision.kind, ctx, unsubscribeUrl)
 
       if (dryRun) {

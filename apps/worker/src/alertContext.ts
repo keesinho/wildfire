@@ -41,7 +41,7 @@ export interface AlertContext {
   fwiClass: string | null
   windSpeedKmh: number | null
   windDirectionCompass: string | null
-  warnings: { type: string; level: string; headline: string | null }[]
+  warnings: { type: string; level: string; headline: string | null; scope: 'region' | 'country' }[]
 }
 
 // ------------------------------------------------------------------ geo helpers
@@ -129,9 +129,26 @@ async function getFwiClass(lat: number, lon: number): Promise<string | null> {
   return nearest[0]?.fwiClass ?? null
 }
 
+type WarningRow = { awarenessType: string; level: string; headline: string | null }
+
+/** Dedupliceert op headline — MeteoAlarm publiceert dezelfde melding soms onder meerdere externalId's. */
+function dedupeWarnings(rows: WarningRow[]): WarningRow[] {
+  const seen = new Set<string>()
+  const out: WarningRow[] = []
+  for (const r of rows) {
+    const key = (r.headline ?? '').trim().toLowerCase()
+    if (key) {
+      if (seen.has(key)) continue
+      seen.add(key)
+    }
+    out.push(r)
+  }
+  return out
+}
+
 async function getActiveWarnings(
   lat: number, lon: number,
-): Promise<{ type: string; level: string; headline: string | null }[]> {
+): Promise<{ type: string; level: string; headline: string | null; scope: 'region' | 'country' }[]> {
   const region3 = await prisma.$queryRaw<{ id: string; countryCode: string }[]>`
     SELECT id, "countryCode" FROM "Region"
     WHERE  level = 3 AND geom IS NOT NULL
@@ -150,19 +167,37 @@ async function getActiveWarnings(
   }
   const regionId = region3[0]?.id ?? null
 
-  const rows = await prisma.$queryRaw<{ awarenessType: string; level: string; headline: string | null }[]>`
+  // Regio-specifieke waarschuwingen hebben voorrang. Alleen als die er niet
+  // zijn, vallen we terug op landelijke ("regionId IS NULL")  waarschuwingen
+  // — en die labelen we expliciet als landelijk, want ze kunnen (door de
+  // EMMA/NUTS-mismatch, zie PLAN.md §11) ook een niet-gemapte regionale
+  // waarschuwing uit een heel ander deel van het land zijn.
+  if (regionId) {
+    const regional = await prisma.$queryRaw<WarningRow[]>`
+      SELECT "awarenessType" AS "awarenessType", level, headline
+      FROM "Warning"
+      WHERE  expires > NOW()
+        AND  "awarenessType" IN ('forest_fire', 'extreme_temp')
+        AND  "regionId" = ${regionId}
+      ORDER BY expires ASC
+    `
+    if (regional.length > 0) {
+      return dedupeWarnings(regional).slice(0, 2).map(r => ({ type: r.awarenessType, level: r.level, headline: r.headline, scope: 'region' as const }))
+    }
+  }
+
+  if (!countryCode) return []
+
+  const countryWide = await prisma.$queryRaw<WarningRow[]>`
     SELECT "awarenessType" AS "awarenessType", level, headline
     FROM "Warning"
     WHERE  expires > NOW()
       AND  "awarenessType" IN ('forest_fire', 'extreme_temp')
-      AND  (
-             "regionId" = ${regionId}
-             OR ("regionId" IS NULL AND "countryCode" = ${countryCode})
-           )
+      AND  "regionId" IS NULL
+      AND  "countryCode" = ${countryCode}
     ORDER BY expires ASC
-    LIMIT 2
   `
-  return rows.map(r => ({ type: r.awarenessType, level: r.level, headline: r.headline }))
+  return dedupeWarnings(countryWide).slice(0, 2).map(r => ({ type: r.awarenessType, level: r.level, headline: r.headline, scope: 'country' as const }))
 }
 
 // ------------------------------------------------------------------ context
@@ -271,7 +306,11 @@ export async function buildMessage(
     : await generateContextSentence(event, ctx)
 
   const warningsLines = ctx.warnings.length > 0
-    ? ctx.warnings.map(w => `- ${w.level} ${w.type === 'forest_fire' ? 'bosbrandwaarschuwing' : 'hitte-waarschuwing'}: ${w.headline ?? ''}`).join('\n')
+    ? ctx.warnings.map(w => {
+        const kind  = w.type === 'forest_fire' ? 'bosbrandwaarschuwing' : 'hitte-waarschuwing'
+        const scope = w.scope === 'country' ? ' (landelijk — niet per se voor jouw regio)' : ''
+        return `- ${w.level} ${kind}${scope}: ${w.headline ?? ''}`
+      }).join('\n')
     : null
 
   const lines = [
