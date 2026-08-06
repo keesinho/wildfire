@@ -119,35 +119,47 @@ async function getNotificationHistory(subscriptionId: string, eventId: string) {
 
 interface Decision { kind: AlertKind; distanceKm: number }
 
-async function decide(sub: SubRow, event: EventRow): Promise<Decision | null> {
+type SkipReason =
+  | 'buiten_radius'           // hull-afstand > sub.radiusKm
+  | 'onder_severity_drempel'  // event.severity < sub.minSeverity (bij eerste melding)
+  | 'niet_actief'             // status is CANDIDATE/COOLING, nog geen 'nieuw'-trigger
+  | 'al_gelogd'               // al gemeld en geen band-jump/krimp sinds toen, of CLOSED met al een all_clear
+  | 'throttle'                // laatste new/update-melding minder dan THROTTLE_H geleden
+
+interface DecideResult { decision: Decision | null; reason: SkipReason | null }
+
+async function decide(sub: SubRow, event: EventRow): Promise<DecideResult> {
   const { last, lastNewOrUpdate, hasAllClear } = await getNotificationHistory(sub.id, event.id)
 
   if (event.status === 'CLOSED') {
-    if (hasAllClear) return null
+    if (hasAllClear) return { decision: null, reason: 'al_gelogd' }
     const distanceKm = await getHullDistanceKm(sub.lat, sub.lon, event.id)
-    return { kind: 'all_clear', distanceKm } // bypasst de 6u-throttle — eenmalig bericht
+    return { decision: { kind: 'all_clear', distanceKm }, reason: null } // bypasst de 6u-throttle — eenmalig bericht
   }
 
   // Echte straal-check op hull-afstand — de SQL-prefilter hierboven is bewust
   // ruimer (marge + op centroid) en filtert dit niet af.
   const distanceKm = await getHullDistanceKm(sub.lat, sub.lon, event.id)
-  if (distanceKm > sub.radiusKm) return null
+  if (distanceKm > sub.radiusKm) return { decision: null, reason: 'buiten_radius' }
 
-  let kind: AlertKind | null = null
+  let kind: AlertKind
 
   if (!lastNewOrUpdate) {
-    if (event.status === 'ACTIVE' && event.severity >= sub.minSeverity) kind = 'new'
+    if (event.status !== 'ACTIVE') return { decision: null, reason: 'niet_actief' }
+    if (event.severity < sub.minSeverity) return { decision: null, reason: 'onder_severity_drempel' }
+    kind = 'new'
   } else {
     const bandJump = severityBand(event.severity) > severityBand(lastNewOrUpdate.severity ?? 0)
     const shrunk   = lastNewOrUpdate.distanceKm != null && distanceKm <= lastNewOrUpdate.distanceKm * 0.8
-    if (bandJump || shrunk) kind = 'update'
+    if (!bandJump && !shrunk) return { decision: null, reason: 'al_gelogd' }
+    kind = 'update'
   }
 
-  if (!kind) return null
+  if (last && Date.now() - last.sentAt.getTime() < THROTTLE_H * 3_600_000) {
+    return { decision: null, reason: 'throttle' } // rule 3
+  }
 
-  if (last && Date.now() - last.sentAt.getTime() < THROTTLE_H * 3_600_000) return null // rule 3
-
-  return { kind, distanceKm }
+  return { decision: { kind, distanceKm }, reason: null }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────
@@ -172,8 +184,12 @@ async function main() {
     const events = await getCandidateEvents(sub)
 
     for (const event of events) {
-      const decision = await decide(sub, event)
-      if (!decision) { skipped++; continue }
+      const { decision, reason } = await decide(sub, event)
+      if (!decision) {
+        skipped++
+        console.log(`[alerts] SKIP ${sub.channel} ${sub.target} (sub ${sub.id}, event ${event.slug}) — reden: ${reason}`)
+        continue
+      }
 
       const subLike: SubscriptionLike = { id: sub.id, lat: sub.lat, lon: sub.lon, target: sub.target }
       const ctx = await buildContext(subLike, event)
