@@ -15,6 +15,7 @@
     "seed:heat-sources": "DOTENV_CONFIG_PATH=.env tsx scripts/seed-heat-sources.ts",
     "seed:demo-key": "DOTENV_CONFIG_PATH=.env tsx scripts/seed-demo-key.ts",
     "replay":   "pnpm --filter worker replay",
+    "repair":   "pnpm --filter worker repair",
     "suspects": "pnpm --filter worker suspects"
   },
   "dependencies": {

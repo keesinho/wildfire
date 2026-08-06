@@ -92,12 +92,16 @@ async function main() {
 
   for (let i = 0; i < total; i++) {
     const d = detections[i]
-    const eventId = await processDetection(d, cfg)
-    if (eventId) {
-      attached++
-      affectedEvents.add(eventId)
-    } else {
-      loose++
+    try {
+      const eventId = await processDetection(d, cfg)
+      if (eventId) {
+        attached++
+        affectedEvents.add(eventId)
+      } else {
+        loose++
+      }
+    } catch (err) {
+      console.error(`\n[replay] processDetection mislukt voor detectie ${d.id}:`, err)
     }
 
     if ((i + 1) % 100 === 0 || i === total - 1) {
@@ -113,7 +117,11 @@ async function main() {
   const eventIds = [...affectedEvents]
   console.log(`[replay] herbereken ${eventIds.length} events…`)
   for (let i = 0; i < eventIds.length; i++) {
-    await recalculateEvent(eventIds[i])
+    try {
+      await recalculateEvent(eventIds[i])
+    } catch (err) {
+      console.error(`\n[replay] recalculateEvent mislukt voor event ${eventIds[i]}:`, err)
+    }
     if ((i + 1) % 10 === 0 || i === eventIds.length - 1) {
       process.stdout.write(`\r[replay] herberekend: ${i + 1}/${eventIds.length}   `)
     }

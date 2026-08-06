@@ -16,13 +16,19 @@ import { prisma } from '@wildfire/db'
 
 const GEONAMES_URL = 'https://download.geonames.org/export/dump/cities500.zip'
 
-// Europese ISO 3166-1 alpha-2 landcodes
+// ISO 3166-1 alpha-2 landcodes van alle landen die de FIRMS-ingestbbox
+// (-25,34,45,72 — zie apps/worker/src/ingest.ts) raken. Naast "klassiek Europa"
+// dus ook het stuk Rusland en de Kaukasus binnen die bbox (lon < 45, lat > 34);
+// Noord-Afrika/Midden-Oosten valt bewust buiten de bbox-breedtegraad en wordt
+// hoe dan ook door de no_nuts_region-filter tegengehouden (zie ingest.ts).
 const EUROPE = new Set([
   'AL', 'AD', 'AT', 'BY', 'BE', 'BA', 'BG', 'HR', 'CY', 'CZ',
   'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IS', 'IE', 'IT',
   'XK', 'LV', 'LI', 'LT', 'LU', 'MT', 'MD', 'MC', 'ME', 'NL',
   'MK', 'NO', 'PL', 'PT', 'RO', 'SM', 'RS', 'SK', 'SI', 'ES',
   'SE', 'CH', 'TR', 'UA', 'GB', 'VA',
+  // Rusland (westelijk deel binnen bbox) + Kaukasus
+  'RU', 'GE', 'AM', 'AZ',
 ])
 
 async function download(url: string, dest: string) {

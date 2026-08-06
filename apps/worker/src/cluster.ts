@@ -25,6 +25,16 @@ export const DEFAULT_CONFIG: ClusterConfig = {
   closedH:       72,
 }
 
+/**
+ * Eurostat/NUTS gebruikt voor twee landen een code die afwijkt van ISO 3166-1,
+ * dat de Place-tabel (GeoNames) gebruikt: Verenigd Koninkrijk = "UK" (Eurostat)
+ * vs. "GB" (ISO), Griekenland = "EL" (Eurostat) vs. "GR" (ISO). Zonder deze
+ * mapping levert de dichtstbijzijnde-plaats-query voor die twee landen altijd
+ * 0 rijen op — Region.countryCode ("UK"/"EL") matcht dan nooit Place.countryCode
+ * ("GB"/"GR"), ook al is de stad wél gezaaid.
+ */
+const NUTS_TO_ISO_COUNTRY: Record<string, string> = { UK: 'GB', EL: 'GR' }
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface DetectionLike {
@@ -244,10 +254,11 @@ export async function recalculateEvent(eventId: string): Promise<void> {
   const countryCode = regionRows[0]?.countryCode ?? null
 
   // 6. Dichtstbijzijnde stad (voor naamgeving)
-  const placeRows = countryCode
+  const placeCountryCode = countryCode ? (NUTS_TO_ISO_COUNTRY[countryCode] ?? countryCode) : null
+  const placeRows = placeCountryCode
     ? await prisma.$queryRaw<{ name: string }[]>`
         SELECT name FROM "Place"
-        WHERE  "countryCode" = ${countryCode}
+        WHERE  "countryCode" = ${placeCountryCode}
         ORDER BY ST_MakePoint(lon, lat) <-> ST_MakePoint(${stats.cx}, ${stats.cy})
         LIMIT 1
       `
@@ -369,16 +380,29 @@ export async function clusterAndRecalculate(
 
   if (detections.length === 0) return 0
 
-  // Verwerk detectie voor detectie
+  // Verwerk detectie voor detectie. Eén mislukte detectie mag de rest van de
+  // batch niet blokkeren — anders blijven alle later-in-volgorde detecties
+  // onaangeraakt (eventId blijft NULL) tot een volgende run.
   const touchedEvents = new Set<string>()
   for (const d of detections) {
-    const eventId = await processDetection(d, cfg)
-    if (eventId) touchedEvents.add(eventId)
+    try {
+      const eventId = await processDetection(d, cfg)
+      if (eventId) touchedEvents.add(eventId)
+    } catch (err) {
+      console.error(`[cluster] processDetection mislukt voor detectie ${d.id}:`, err)
+    }
   }
 
-  // Herbereken alle gerakte events
+  // Herbereken alle gerakte events. Zelfde redenering: één stuk event mag niet
+  // de herberekening van alle andere geraakte events in deze batch blokkeren —
+  // dat liet events achter met eeuwig totalFrp=0/detectionCount=0 (en dus een
+  // te lage severity, waardoor een echte brand onder de alert-drempel bleef).
   for (const eventId of touchedEvents) {
-    await recalculateEvent(eventId)
+    try {
+      await recalculateEvent(eventId)
+    } catch (err) {
+      console.error(`[cluster] recalculateEvent mislukt voor event ${eventId}:`, err)
+    }
   }
 
   // Statusmachine met huidige tijd
