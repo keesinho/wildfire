@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { NAV_HEIGHT } from '../Nav'
 
 const DET_COLOR  = { HIGH: '#ef4444', NOMINAL: '#f97316', LOW: '#eab308' }
 const EVT_COLOR  = { ACTIVE: '#ef4444', COOLING: '#f97316', CANDIDATE: '#6b7280' }
@@ -242,7 +243,7 @@ export default function MapClient() {
   )
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh', fontFamily: 'monospace' }}>
+    <div style={{ position: 'relative', width: '100%', height: `calc(100vh - ${NAV_HEIGHT}px)`, fontFamily: 'monospace' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
       <div style={{

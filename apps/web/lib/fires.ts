@@ -42,6 +42,7 @@ function toFeature(r: EventRow) {
       estAreaHa:      r.est_area_ha ? Math.round(r.est_area_ha) : null,
       countryCode:    r.country_code,
       durationH,
+      firstSeen:      new Date(r.first_seen).toISOString(),
       lastSeen:       new Date(r.last_seen).toISOString(),
     },
   }

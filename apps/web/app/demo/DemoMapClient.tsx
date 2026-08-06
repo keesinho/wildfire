@@ -2,13 +2,47 @@
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { NAV_HEIGHT } from '../Nav'
 
-const EVT_COLOR  = { ACTIVE: '#ef4444', COOLING: '#f97316', CANDIDATE: '#6b7280' }
-const TREND_ICON = { GROWING: '↑', STABLE: '→', DECLINING: '↓', UNKNOWN: '?' }
+const EVT_COLOR = { ACTIVE: '#ef4444', COOLING: '#f97316', CANDIDATE: '#6b7280' }
 
-function fmtHa(ha: number | null): string {
-  if (!ha) return '—'
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE:    'Actief',
+  COOLING:   'Afkoelend — geen nieuwe detecties',
+  CANDIDATE: 'Niet bevestigd',
+}
+
+/**
+ * Iets donkerder dan EVT_COLOR (die is afgestemd op de donkere kaart-overlays),
+ * zodat statustekst op de witte popup-achtergrond van MapLibre genoeg contrast heeft.
+ */
+const STATUS_TEXT_COLOR: Record<string, string> = {
+  ACTIVE: '#b91c1c', COOLING: '#9a3412', CANDIDATE: '#4b5563',
+}
+const LABEL_COLOR = '#666'
+const VALUE_COLOR = '#111'
+const UNNAMED_PLACEHOLDER = '(onbekend)'
+const UNNAMED_TEXT = 'Nieuwe detectie — locatie wordt bepaald'
+
+const HEAT_TOOLTIP =
+  'Hoeveel warmte de satelliet op deze plek meet — een indicatie van intensiteit, geen directe temperatuurmeting.'
+
+/** Banden uit apps/worker/src/cluster.ts: het cijfer zelf is intern en te precies om te tonen. */
+function severityLabel(severity: number): string {
+  if (severity >= 75) return 'Extreem'
+  if (severity >= 50) return 'Hoog'
+  if (severity >= 20) return 'Middel'
+  return 'Laag'
+}
+
+function fmtHa(ha: number): string {
   return ha >= 10_000 ? `${(ha / 10_000).toFixed(1)} kha` : `${ha.toLocaleString()} ha`
+}
+
+function fmtDateNl(iso: string): string {
+  return new Date(iso).toLocaleString('nl-NL', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 
 interface Props {
@@ -70,17 +104,34 @@ export default function DemoMapClient({ initialData }: Props) {
         map.on('click', layer, (e) => {
           const p = e.features?.[0]?.properties as Record<string, unknown> | undefined
           if (!p) return
-          const trend = TREND_ICON[p['trend'] as keyof typeof TREND_ICON] ?? '?'
-          const statusColor = EVT_COLOR[p['status'] as keyof typeof EVT_COLOR] ?? '#aaa'
+          const status       = p['status'] as keyof typeof EVT_COLOR
+          const statusColor = STATUS_TEXT_COLOR[status] ?? LABEL_COLOR
+          const statusLabel = STATUS_LABEL[status] ?? String(p['status'])
+          const sevLabel    = severityLabel(Number(p['severity']))
+          const areaHa      = p['estAreaHa'] as number | null
+          const heatMwValue = Number(p['totalFrp'])
+          const name        = p['name'] === UNNAMED_PLACEHOLDER ? UNNAMED_TEXT : String(p['name'])
+
+          const label = (text: string) => `<span style="color:${LABEL_COLOR}">${text}</span>`
+          const value = (html: string) => `<span style="color:${VALUE_COLOR}">${html}</span>`
+
+          const lines = [
+            `<span style="color:${statusColor}; font-weight:600;">${statusLabel}</span>`,
+            `${label('Ernst:')} ${value(`<b>${sevLabel}</b>`)} &nbsp;·&nbsp; ${value(String(p['countryCode'] ?? '—'))}`,
+          ]
+          if (areaHa) lines.push(`${label('Oppervlak:')} ${value(fmtHa(areaHa))}`)
+          if (heatMwValue > 0) {
+            const heatMw = String(p['totalFrp']).replace('.', ',')
+            lines.push(
+              `<span title="${HEAT_TOOLTIP}" style="color:${LABEL_COLOR}; border-bottom:1px dotted #999; cursor:help;">Warmte-uitstoot:</span> ${value(`${heatMw} MW`)}`,
+            )
+          }
+          lines.push(`${label('Eerst gezien:')} ${value(fmtDateNl(p['firstSeen'] as string))}`)
+          lines.push(`${label('Laatst gezien:')} ${value(fmtDateNl(p['lastSeen'] as string))}`)
+
           new maplibregl.Popup({ maxWidth: '280px' })
             .setLngLat(e.lngLat)
-            .setHTML(`
-              <b>${p['name']}</b> ${trend}<br/>
-              <span style="color:${statusColor}">${p['status']}</span>
-              &nbsp;·&nbsp; sev <b>${p['severity']}</b> &nbsp;·&nbsp; ${p['countryCode'] ?? '—'}<br/>
-              Oppervlak: ${fmtHa(p['estAreaHa'] as number | null)}<br/>
-              Detecties: ${p['detectionCount']} &nbsp; FRP: ${p['totalFrp']} MW
-            `)
+            .setHTML(`<div style="color:${VALUE_COLOR}"><b>${name}</b><br/>${lines.join('<br/>')}</div>`)
             .addTo(map)
         })
         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
@@ -92,23 +143,27 @@ export default function DemoMapClient({ initialData }: Props) {
   }, [initialData])
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh', fontFamily: 'monospace' }}>
+    <div style={{ position: 'relative', width: '100%', height: `calc(100vh - ${NAV_HEIGHT}px)`, fontFamily: 'monospace' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       <div style={{
         position: 'absolute', top: 12, left: 12,
         background: 'rgba(10,10,10,0.84)', color: '#e5e5e5',
         padding: '10px 14px', borderRadius: 8, fontSize: 12, maxWidth: 240,
       }}>
-        <div style={{ fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>Wildfire API — live demo</div>
-        <div style={{ color: '#888' }}>
+        <div style={{ fontWeight: 'bold', fontSize: 13, marginBottom: 4 }}>Vuuralert — live demo</div>
+        <div style={{ color: '#aaa' }}>
           Deze data komt binnen via <code>GET /api/v1/fires</code> — dezelfde publieke API die
           je op <a href="/dashboard" style={{ color: '#f97316' }}>/dashboard</a> een key voor kunt maken.
         </div>
-        <div style={{ marginTop: 6 }}>
-          <span style={{ color: EVT_COLOR.ACTIVE }}>■</span> ACTIVE &nbsp;
-          <span style={{ color: EVT_COLOR.COOLING }}>■</span> COOLING &nbsp;
-          <span style={{ color: EVT_COLOR.CANDIDATE }}>■</span> CANDIDATE
-        </div>
+      </div>
+      <div style={{
+        position: 'absolute', bottom: 12, left: 12,
+        background: 'rgba(10,10,10,0.84)', color: '#e5e5e5',
+        padding: '8px 14px', borderRadius: 8, fontSize: 12,
+      }}>
+        <span style={{ color: EVT_COLOR.ACTIVE }}>■</span> Actief &nbsp;
+        <span style={{ color: EVT_COLOR.COOLING }}>■</span> Afkoelend &nbsp;
+        <span style={{ color: EVT_COLOR.CANDIDATE }}>■</span> Niet bevestigd
       </div>
     </div>
   )

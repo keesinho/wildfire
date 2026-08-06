@@ -36,7 +36,8 @@ const FIRES_EXAMPLE = `{
       "id": "cmsenw...", "name": "Brand bij Bottidda", "slug": "2026-bottidda-...",
       "status": "ACTIVE", "severity": 75, "trend": "STABLE",
       "detectionCount": 12, "totalFrp": "340.2", "estAreaHa": 45,
-      "countryCode": "IT", "durationH": 30, "lastSeen": "2026-08-04T16:00:00.000Z"
+      "countryCode": "IT", "durationH": 30,
+      "firstSeen": "2026-08-03T10:00:00.000Z", "lastSeen": "2026-08-04T16:00:00.000Z"
     }
   }],
   "attribution": ["NASA FIRMS", "© European Union, Copernicus/EFFIS", "..."]

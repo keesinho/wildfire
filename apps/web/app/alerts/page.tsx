@@ -66,7 +66,10 @@ export default function AlertsPage() {
   }
 
   return (
-    <main style={{ padding: '2rem 1rem', fontFamily: 'sans-serif' }}>
+    <main style={{
+      padding: '2rem 1rem', fontFamily: 'sans-serif',
+      background: '#0a0a0a', color: '#e5e5e5', minHeight: '100vh',
+    }}>
       <h1 style={{ textAlign: 'center' }}>Brandwaarschuwingen per e-mail</h1>
       <p style={{ maxWidth: 480, margin: '0 auto 1.5rem', textAlign: 'center', color: '#aaa' }}>
         Schrijf je in en krijg een melding zodra er een brand wordt gedetecteerd binnen jouw straal.
@@ -108,7 +111,7 @@ export default function AlertsPage() {
         {message && <p style={{ color: '#22c55e' }}>{message}</p>}
       </div>
 
-      <p style={{ maxWidth: 480, margin: '0 auto', fontSize: '0.8rem', color: '#888', textAlign: 'center' }}>
+      <p style={{ maxWidth: 480, margin: '0 auto', fontSize: '0.8rem', color: '#aaa', textAlign: 'center' }}>
         Dit is geen officieel waarschuwingsplatform — volg bij gevaar altijd de instructies van
         lokale autoriteiten. Je kunt je op elk moment uitschrijven via de link onderaan elke e-mail.
       </p>
