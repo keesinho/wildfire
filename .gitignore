@@ -6,3 +6,5 @@ dist/
 *.tsbuildinfo
 packages/db/src/generated/
 apps/**/.env*
+.vercel
+.env*
