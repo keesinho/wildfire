@@ -12,6 +12,11 @@ const DemoMapClient = dynamic(() => import('./DemoMapClient'), {
   ),
 })
 
-export default function DemoMapLoader({ initialData }: { initialData: GeoJSON.FeatureCollection }) {
-  return <DemoMapClient initialData={initialData} />
+interface Props {
+  initialData: GeoJSON.FeatureCollection
+  error: boolean
+}
+
+export default function DemoMapLoader({ initialData, error }: Props) {
+  return <DemoMapClient initialData={initialData} error={error} />
 }

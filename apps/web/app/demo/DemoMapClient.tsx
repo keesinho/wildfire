@@ -47,6 +47,7 @@ function fmtDateNl(iso: string): string {
 
 interface Props {
   initialData: GeoJSON.FeatureCollection
+  error: boolean
 }
 
 /**
@@ -55,7 +56,7 @@ interface Props {
  * losse detecties/debug-controls: dit is bewijsmateriaal, geen debug-tool
  * (die blijft op /map staan).
  */
-export default function DemoMapClient({ initialData }: Props) {
+export default function DemoMapClient({ initialData, error }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<maplibregl.Map | null>(null)
 
@@ -145,6 +146,16 @@ export default function DemoMapClient({ initialData }: Props) {
   return (
     <div style={{ position: 'relative', width: '100%', height: `calc(100vh - ${NAV_HEIGHT}px)`, fontFamily: 'monospace' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {error && (
+        <div style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(127,29,29,0.92)', color: '#fff',
+          padding: '8px 16px', borderRadius: 8, fontSize: 13, fontFamily: 'monospace',
+          zIndex: 10,
+        }}>
+          Kaartdata tijdelijk niet beschikbaar
+        </div>
+      )}
       <div style={{
         position: 'absolute', top: 12, left: 12,
         background: 'rgba(10,10,10,0.84)', color: '#e5e5e5',
