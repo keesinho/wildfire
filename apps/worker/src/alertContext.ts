@@ -41,7 +41,10 @@ export interface AlertContext {
   fwiClass: string | null
   windSpeedKmh: number | null
   windDirectionCompass: string | null
-  warnings: { type: string; level: string; headline: string | null; scope: 'region' | 'country' }[]
+  warnings: {
+    type: string; level: string; headline: string | null; scope: 'region' | 'country'
+    senderName: string | null; issuedAt: string | null
+  }[]
 }
 
 // ------------------------------------------------------------------ geo helpers
@@ -129,7 +132,10 @@ async function getFwiClass(lat: number, lon: number): Promise<string | null> {
   return nearest[0]?.fwiClass ?? null
 }
 
-type WarningRow = { awarenessType: string; level: string; headline: string | null }
+type WarningRow = {
+  awarenessType: string; level: string; headline: string | null
+  senderName: string | null; issuedAt: Date | null
+}
 
 /** Dedupliceert op headline — MeteoAlarm publiceert dezelfde melding soms onder meerdere externalId's. */
 function dedupeWarnings(rows: WarningRow[]): WarningRow[] {
@@ -148,7 +154,10 @@ function dedupeWarnings(rows: WarningRow[]): WarningRow[] {
 
 async function getActiveWarnings(
   lat: number, lon: number,
-): Promise<{ type: string; level: string; headline: string | null; scope: 'region' | 'country' }[]> {
+): Promise<{
+  type: string; level: string; headline: string | null; scope: 'region' | 'country'
+  senderName: string | null; issuedAt: string | null
+}[]> {
   const region3 = await prisma.$queryRaw<{ id: string; countryCode: string }[]>`
     SELECT id, "countryCode" FROM "Region"
     WHERE  level = 3 AND geom IS NOT NULL
@@ -174,7 +183,8 @@ async function getActiveWarnings(
   // waarschuwing uit een heel ander deel van het land zijn.
   if (regionId) {
     const regional = await prisma.$queryRaw<WarningRow[]>`
-      SELECT "awarenessType" AS "awarenessType", level, headline
+      SELECT "awarenessType" AS "awarenessType", level, headline,
+             "senderName" AS "senderName", "issuedAt" AS "issuedAt"
       FROM "Warning"
       WHERE  expires > NOW()
         AND  "awarenessType" IN ('forest_fire', 'extreme_temp')
@@ -182,14 +192,18 @@ async function getActiveWarnings(
       ORDER BY expires ASC
     `
     if (regional.length > 0) {
-      return dedupeWarnings(regional).slice(0, 2).map(r => ({ type: r.awarenessType, level: r.level, headline: r.headline, scope: 'region' as const }))
+      return dedupeWarnings(regional).slice(0, 2).map(r => ({
+        type: r.awarenessType, level: r.level, headline: r.headline, scope: 'region' as const,
+        senderName: r.senderName, issuedAt: r.issuedAt ? r.issuedAt.toISOString() : null,
+      }))
     }
   }
 
   if (!countryCode) return []
 
   const countryWide = await prisma.$queryRaw<WarningRow[]>`
-    SELECT "awarenessType" AS "awarenessType", level, headline
+    SELECT "awarenessType" AS "awarenessType", level, headline,
+           "senderName" AS "senderName", "issuedAt" AS "issuedAt"
     FROM "Warning"
     WHERE  expires > NOW()
       AND  "awarenessType" IN ('forest_fire', 'extreme_temp')
@@ -197,7 +211,10 @@ async function getActiveWarnings(
       AND  "countryCode" = ${countryCode}
     ORDER BY expires ASC
   `
-  return dedupeWarnings(countryWide).slice(0, 2).map(r => ({ type: r.awarenessType, level: r.level, headline: r.headline, scope: 'country' as const }))
+  return dedupeWarnings(countryWide).slice(0, 2).map(r => ({
+    type: r.awarenessType, level: r.level, headline: r.headline, scope: 'country' as const,
+    senderName: r.senderName, issuedAt: r.issuedAt ? r.issuedAt.toISOString() : null,
+  }))
 }
 
 // ------------------------------------------------------------------ context
@@ -228,6 +245,13 @@ export async function buildContext(sub: SubscriptionLike, event: EventLike): Pro
 
 const TREND_NL: Record<string, string> = {
   GROWING: 'groeiend', STABLE: 'stabiel', DECLINING: 'afnemend', UNKNOWN: 'onbekend',
+}
+
+function formatIssuedAt(iso: string): string {
+  return new Date(iso).toLocaleString('nl-NL', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    timeZone: 'UTC',
+  }) + ' UTC'
 }
 
 function fallbackSentence(event: EventLike, ctx: AlertContext): string {
@@ -309,7 +333,10 @@ export async function buildMessage(
     ? ctx.warnings.map(w => {
         const kind  = w.type === 'forest_fire' ? 'bosbrandwaarschuwing' : 'hitte-waarschuwing'
         const scope = w.scope === 'country' ? ' (landelijk — niet per se voor jouw regio)' : ''
-        return `- ${w.level} ${kind}${scope}: ${w.headline ?? ''}`
+        // Bron + uitgiftetijd verplicht te tonen bij MeteoAlarm-waarschuwingen (PLAN.md §8).
+        const source = w.senderName ? `, bron: ${w.senderName}` : ''
+        const issued = w.issuedAt ? `, uitgegeven ${formatIssuedAt(w.issuedAt)}` : ''
+        return `- ${w.level} ${kind}${scope}: ${w.headline ?? ''}${source}${issued}`
       }).join('\n')
     : null
 

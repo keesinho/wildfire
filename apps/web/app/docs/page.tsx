@@ -21,7 +21,8 @@ const RISK_EXAMPLE = `{
   },
   "warnings": [
     { "type": "extreme_temp", "level": "RED", "expires": "2026-08-04T17:59:00.000Z",
-      "headline": "Red High-temperature Warning issued for Italy - Sardegna", "scope": "country" }
+      "headline": "Red High-temperature Warning issued for Italy - Sardegna", "scope": "country",
+      "senderName": "Servizio Meteorologico", "issuedAt": "2026-08-04T05:12:00.000Z" }
   ],
   "wind": { "temperatureC": 33.8, "windSpeedKmh": 16.7, "windDirectionDeg": 303 },
   "attribution": ["NASA FIRMS", "© European Union, Copernicus/EFFIS", "..."]
@@ -145,9 +146,12 @@ export default function DocsPage() {
         <h2>Attributie</h2>
         <p>
           Elke response bevat een <code>attribution</code>-veld — verplicht doorvertalen naar
-          je eigen gebruikers (NASA FIRMS, Copernicus/EFFIS, MeteoAlarm, Eurostat GISCO,
-          Open-Meteo). Dit is geen officieel waarschuwingsplatform: volg altijd lokale
-          autoriteiten.
+          je eigen gebruikers (NASA FIRMS, Copernicus/EFFIS, &quot;EUMETNET – MeteoAlarm&quot;,
+          Eurostat GISCO, Open-Meteo). Bevat een response een waarschuwing, dan noemen{' '}
+          <code>warnings[].senderName</code> en <code>warnings[].issuedAt</code> ook de
+          uitgevende nationale weerdienst en het uitgiftetijdstip van die specifieke
+          waarschuwing — beide verplicht door de MeteoAlarm-licentie (CC BY 4.0). Dit is geen
+          officieel waarschuwingsplatform: volg altijd lokale autoriteiten.
         </p>
       </div>
     </main>

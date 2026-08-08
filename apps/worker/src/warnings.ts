@@ -17,6 +17,12 @@
  * een latere EMMA→NUTS-mappingtabel zonder herfetch gebouwd kan worden.
  * `/api/risk` vangt de non-match op met een land-brede fallback.
  *
+ * Attributie (PLAN.md §8): de Atom-entry bevat geen CAP-zender, dus voor elke
+ * entry die we bewaren (na de fire/temperature-filter) halen we het volledige
+ * CAP-document op via de "application/cap+xml"-link om senderName (nationale
+ * weerdienst) te lezen — één extra fetch per opgeslagen warning, niet per
+ * feed-entry.
+ *
  * Gebruik:
  *   pnpm --filter worker warnings
  */
@@ -80,10 +86,48 @@ interface RawEntry {
   'cap:areaDesc'?:  string
   'cap:event'?:     string
   'cap:onset'?:     string
+  'cap:sent'?:      string
   'cap:expires'?:   string
   'cap:severity'?:  string
   'cap:identifier'?: string
   title?:           string
+  link?:            { type?: string; href?: string }[] | { type?: string; href?: string }
+}
+
+interface RawCapInfo {
+  language?:   string
+  senderName?: string
+}
+
+interface RawCapAlert {
+  sender?: string
+  info?:   RawCapInfo[] | RawCapInfo
+}
+
+/**
+ * Haalt de nationale weerdienst op uit de volledige CAP-XML van één warning
+ * (senderName staat niet in de Atom-entry zelf, alleen in het CAP-document
+ * waarnaar de entry linkt) — verplicht te tonen bij één-land-info
+ * (MeteoAlarm CC BY 4.0, PLAN.md §8).
+ */
+async function fetchSenderName(entry: RawEntry): Promise<string | null> {
+  const links = Array.isArray(entry.link) ? entry.link : entry.link ? [entry.link] : []
+  const capUrl = links.find(l => l.type === 'application/cap+xml')?.href
+  if (!capUrl) return null
+
+  try {
+    const res = await fetch(capUrl)
+    if (!res.ok) return null
+    const alert: RawCapAlert | undefined = parser.parse(await res.text())?.alert
+    if (!alert) return null
+
+    const infos = Array.isArray(alert.info) ? alert.info : alert.info ? [alert.info] : []
+    const info = infos.find(i => i.language?.startsWith('en')) ?? infos[0]
+    return info?.senderName ?? alert.sender ?? null
+  } catch (err) {
+    console.error('[warnings]   senderName-fetch mislukt:', (err as Error)?.message ?? err)
+    return null
+  }
 }
 
 type AwarenessType = 'forest_fire' | 'extreme_temp'
@@ -131,6 +175,13 @@ async function fetchCountryWarnings(iso2: string, slug: string): Promise<number>
     const expires = entry['cap:expires'] ? new Date(entry['cap:expires']) : null
     if (!onset || !expires || isNaN(onset.getTime()) || isNaN(expires.getTime())) continue
 
+    // Tijdstip van uitgifte: cap:sent, met onset als terugval als sent ontbreekt/ongeldig is
+    // (verplicht te tonen, PLAN.md §8).
+    const sent = entry['cap:sent'] ? new Date(entry['cap:sent']) : null
+    const issuedAt = sent && !isNaN(sent.getTime()) ? sent : onset
+
+    const senderName = await fetchSenderName(entry)
+
     const regionRows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "Region" WHERE code = ${geocodeValue} ORDER BY level DESC LIMIT 1
     `
@@ -145,6 +196,8 @@ async function fetchCountryWarnings(iso2: string, slug: string): Promise<number>
         level,
         onset,
         expires,
+        issuedAt,
+        senderName,
         headline:      entry.title ?? null,
         regionId,
         raw: {
@@ -159,6 +212,8 @@ async function fetchCountryWarnings(iso2: string, slug: string): Promise<number>
         level,
         onset,
         expires,
+        issuedAt,
+        senderName,
         headline: entry.title ?? null,
         regionId,
         fetchedAt: new Date(),

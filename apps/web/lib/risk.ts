@@ -27,7 +27,7 @@ type FireRow = {
 }
 type WarningRow = {
   awarenessType: string; level: string; expires: Date; headline: string | null
-  regionId: string | null
+  regionId: string | null; senderName: string | null; issuedAt: Date | null
 }
 
 export async function computeRisk(lat: number, lon: number) {
@@ -124,7 +124,8 @@ export async function computeRisk(lat: number, lon: number) {
   // Region-tabel (zie apps/worker/src/warnings.ts) — zonder deze fallback
   // zouden die landen nooit een waarschuwing te zien krijgen.
   const warningRows = await prisma.$queryRaw<WarningRow[]>`
-    SELECT "awarenessType" AS "awarenessType", level, expires, headline, "regionId" AS "regionId"
+    SELECT "awarenessType" AS "awarenessType", level, expires, headline, "regionId" AS "regionId",
+           "senderName" AS "senderName", "issuedAt" AS "issuedAt"
     FROM "Warning"
     WHERE  expires > NOW()
       AND  "awarenessType" IN ('forest_fire', 'extreme_temp')
@@ -135,11 +136,14 @@ export async function computeRisk(lat: number, lon: number) {
     ORDER BY expires ASC
   `
   const warnings = warningRows.map(w => ({
-    type:     w.awarenessType,
-    level:    w.level,
-    expires:  w.expires.toISOString(),
-    headline: w.headline,
-    scope:    w.regionId === regionId && regionId !== null ? 'region' as const : 'country' as const,
+    type:       w.awarenessType,
+    level:      w.level,
+    expires:    w.expires.toISOString(),
+    headline:   w.headline,
+    scope:      w.regionId === regionId && regionId !== null ? 'region' as const : 'country' as const,
+    // Nationale weerdienst — verplicht te tonen bij één-land-info (MeteoAlarm CC BY 4.0, PLAN.md §8).
+    senderName: w.senderName,
+    issuedAt:   w.issuedAt ? w.issuedAt.toISOString() : null,
   }))
 
   // ── Wind/temp (Open-Meteo, gecached) ────────────────────────────────────

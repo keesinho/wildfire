@@ -117,6 +117,10 @@ model Warning {
   onset         DateTime
   expires       DateTime
   headline      String?
+  // CAP senderName (fallback sender) — nationale weerdienst, verplicht te tonen bij één-land-info (MeteoAlarm CC BY 4.0, PLAN.md §8).
+  senderName    String?
+  // CAP sent (fallback onset) — tijdstip van uitgifte, verplicht te tonen (PLAN.md §8).
+  issuedAt      DateTime?
   regionId      String?
   region        Region?   @relation(fields: [regionId], references: [id])
   raw           Json

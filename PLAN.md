@@ -362,11 +362,23 @@ Dit lever je meteen demomateriaal op ("zo zag onze reconstructie van de Gironde-
 
 - [ ] **NASA FIRMS**: vrij te gebruiken; "NASA FIRMS" vermelden. Registreer MAP_KEY.
 - [ ] **Copernicus/EFFIS**: vrij, ook commercieel, mét naamsvermelding ("© European Union, Copernicus/EFFIS").
-- [ ] **MeteoAlarm**: attributie verplicht; **lees de herdistributievoorwaarden integraal vóór je warnings doorlevert via de API** (dit is het enige echte licentie-risico — een leesmiddag, geen jurist).
+- [x] **MeteoAlarm**: attributie verplicht; **lees de herdistributievoorwaarden integraal vóór je warnings doorlevert via de API** (dit is het enige echte licentie-risico — een leesmiddag, geen jurist). Licentiecheck 2026-08-08 uitgevoerd — zie §8.1 voor de bevindingen en de aanpassingen die daaruit volgden.
 - [ ] **Eurostat GISCO / NUTS**: vrij met bronvermelding.
 - [ ] **GeoNames**: CC-BY, vermelding in colofon/docs.
 - [ ] **Open-Meteo**: commercieel abonnement afsluiten bij launch.
 - [ ] Overal in site + API een vaste disclaimer: *geen officieel waarschuwingsplatform, volg altijd lokale autoriteiten* (het isdetunnelopen-model).
+
+### 8.1 MeteoAlarm-licentiecheck (2026-08-08)
+
+MeteoAlarm-content wordt herdistribueerd onder voorwaarden **gelijkwaardig aan CC BY 4.0** (zie de `<rights>`-regel in elke Atom-feed), commercieel gebruik is toegestaan, maar met drie aanvullende eisen bovenop de generieke bronvermelding. Alle drie zijn nu geïmplementeerd:
+
+1. **Attributietekst**: `lib/attribution.ts` (`ATTRIBUTION`) toont overal **"EUMETNET – MeteoAlarm"**, ook in single-location responses (`/api/v1/risk`, `/api/v1/fires/:id`) — bewuste keuze (2026-08-08): dit veld beschrijft het aggregatiesysteem waar de data vandaan komt, niet de individuele bron voor die ene response, dus één consistente string overal is minder foutgevoelig dan een scope-afhankelijke variant. De nationale-weerdienst-eis (punt 2 hieronder) wordt separaat gedekt via `Warning.senderName`, niet via dit veld.
+
+2. **Nationale weerdienst noemen bij een waarschuwing uit één land**: `Warning.senderName` (nieuw veld) slaat de CAP `senderName` (fallback `sender`) op. De Atom-feed zelf bevat geen CAP-zender — alleen het onderliggende CAP-document (via de `application/cap+xml`-link per entry) heeft `<sender>`/`<senderName>`. `apps/worker/src/warnings.ts` haalt dat document daarom één keer extra op per **bewaarde** warning (na de fire/temperature-filter, dus niet per feed-entry). `senderName` wordt getoond in `/api/v1/risk`-responses (`warnings[].senderName`) en in alert-mails (`apps/worker/src/alertContext.ts`, regel "bron: ...").
+
+3. **Tijdstip van uitgifte tonen**: `Warning.issuedAt` (nieuw veld) = CAP `sent`, met `onset` als terugval als `sent` ontbreekt of ongeldig is — dit staat al wél in de Atom-entry, dus zonder extra fetch. Getoond als `warnings[].issuedAt` in `/api/v1/risk` en als "uitgegeven ..." in alert-mails.
+
+Databasewijziging: migratie `20260808150000_warning_sender_issued_at` voegt `senderName` (nullable) en `issuedAt` (nullable) toe aan `Warning`, toegepast op Neon op 2026-08-08. Nullable omdat bestaande rijen pas bij de eerstvolgende cron-run (`pnpm --filter worker warnings`) een waarde krijgen (upsert `update`-blok zet ze ook op bestaande rijen). Alle vier plekken die `Warning` bevragen (`lib/risk.ts`, `alertContext.ts` regionaal + landelijk) filteren al op `expires > NOW()`, dus verlopen waarschuwingen — inclusief oude rijen met `senderName`/`issuedAt` nog op `null` — komen sowieso niet in API-responses of alert-mails terecht; ze blijven tot 30 dagen na expiry in de DB staan voor de opruim-cron, maar zijn nooit query-zichtbaar.
 
 ---
 
